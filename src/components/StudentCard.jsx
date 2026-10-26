@@ -36,10 +36,12 @@ export function StudentCard({ o }) {
             <div style={{ color: 'var(--muted)', fontSize: 13 }}>{o.sub}</div>
           </div>
         </div>
-        <div className="no-print" style={{ display: 'flex', gap: 8 }}>
-          <button className="btn secondary small" onClick={() => window.print()}>Cetak / PDF</button>
-          {o.onClose ? <button className="btn secondary small" onClick={o.onClose}>Tutup</button> : null}
-        </div>
+        {o.hideActions ? null : (
+          <div className="no-print" style={{ display: 'flex', gap: 8 }}>
+            <button className="btn secondary small" onClick={() => window.print()}>Cetak / PDF</button>
+            {o.onClose ? <button className="btn secondary small" onClick={o.onClose}>Tutup</button> : null}
+          </div>
+        )}
       </div>
 
       <div className="grid cols-4" style={{ margin: '14px 0' }}>

@@ -4,6 +4,15 @@ Versi baru aplikasi Agrade yang berjalan di **Vercel** dengan **Supabase** (logi
 Fitur sama seperti versi Apps Script: unggah CSV nilai, pemetaan soal ke materi, batas Lemah/Kuat, terbitkan hasil, analisis
 (keseluruhan, per cabang, per individu, kesulitan soal), hasil siswa dengan nama peserta lain disamarkan "xxxx", kelola user.
 
+## Fitur tambahan (v3.2)
+- **Unduh Excel (.xlsx) multi-sheet**: analisis lengkap (ringkasan, per cabang, materi, butir soal, per individu, perlu perhatian), daftar peringkat, dan perbandingan ujian.
+- **Rapor massal PDF**: cetak rapor semua siswa (satu per halaman) per cabang atau sesuai filter, lewat "Simpan sebagai PDF".
+- **Ringkasan otomatis (insight)**, **daftar siswa perlu perhatian**, dan **daya beda butir soal** (menandai soal yang kuncinya patut diperiksa).
+- **Bandingkan dua ujian**: siapa naik/turun, sebaran perubahan, per cabang dan per materi.
+- **Pencapaian siswa** (peringkat 3 besar, nilai naik berturut-turut, dsb.).
+- **UX**: seret-dan-lepas CSV dengan pratinjau, templat CSV, tabel bisa diurutkan, dialog konfirmasi, skeleton loading.
+- Tidak ada perubahan database dari v3.1, jadi tidak perlu SQL baru.
+
 ## Fitur tambahan (v3.1)
 - **Grafik perkembangan nilai** di halaman siswa (nilaimu vs rata-rata tiap ujian) dan **grafik rata-rata per ujian** di dashboard admin.
 - **Rencana belajar** otomatis: materi yang belum kuat beserta nomor soal yang salah atau kosong.

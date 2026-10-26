@@ -6,8 +6,10 @@ import { api } from '../lib/api';
 import { f1, greeting, todayLong, firstName, scoreColor } from '../lib/format';
 import { Icon, ThemeIcon } from '../components/Icon';
 import { Ring } from '../components/Ring';
+import { Skeleton } from '../components/ui';
 import { StudentCard } from '../components/StudentCard';
 import { TrendChart } from '../components/TrendChart';
+import { buildBadges } from '../lib/badges';
 import { ChangePasswordModal } from '../components/ChangePasswordModal';
 
 export function StudentApp() {
@@ -33,6 +35,10 @@ export function StudentApp() {
     .filter((a) => a.my_score != null)
     .sort((x, y) => new Date(x.created_at) - new Date(y.created_at))
     .map((a) => ({ label: a.name, a: a.my_score, b: a.avg_all })), [list]);
+
+  const badges = useMemo(() => buildBadges((list || [])
+    .filter((a) => a.my_score != null)
+    .sort((x, y) => new Date(x.created_at) - new Date(y.created_at))), [list]);
 
   const open = async (id) => {
     try {
@@ -78,9 +84,19 @@ export function StudentApp() {
                 {trend.length > 1 ? <div className="an-note">{trendNote(trend)}</div> : null}
               </div>
             ) : null}
+            {badges.length ? (
+              <>
+                <h3 style={{ margin: '0 0 12px' }}>Pencapaian</h3>
+                <div className="achievements">
+                  {badges.map((b) => (
+                    <div className="achv" key={b.key}><div className="medal">★</div><div><b>{b.title}</b><small>{b.text}</small></div></div>
+                  ))}
+                </div>
+              </>
+            ) : null}
             <h3 style={{ margin: '0 0 12px' }}>Hasil asesmen</h3>
             <div className="grid cols-2">
-              {list === null ? <div className="card" style={{ color: 'var(--muted)' }}>Memuat…</div> : null}
+              {list === null ? <div className="card"><Skeleton lines={3} /></div> : null}
               {list && !list.length ? <div className="card" style={{ color: 'var(--muted)' }}>Belum ada hasil yang diumumkan.</div> : null}
               {(list || []).map((a) => {
                 const has = a.my_score != null;

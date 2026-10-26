@@ -7,6 +7,9 @@ import { parseCsv } from '../lib/csv';
 import { BRANCHES, MIN_PASSWORD } from '../lib/constants';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
+import { SkeletonRows, SortTh, useSort } from '../components/ui';
+import { downloadText } from '../lib/csv';
+import { USERS_TEMPLATE } from '../lib/report';
 import { PasswordField } from '../components/PasswordField';
 
 const EMPTY = { name: '', email: '', password: '', branch: BRANCHES[0], role: 'USER' };
@@ -14,7 +17,7 @@ const CHUNK = 40; // baris per panggilan impor, agar tiap panggilan selesai cepa
 
 export function Users({ intent, clearIntent }) {
   const { profile: me } = useAuth();
-  const { toast, busy } = useFeedback();
+  const { toast, busy, confirm, notice } = useFeedback();
   const [users, setUsers] = useState(null);
   const [q, setQ] = useState('');
   const [branch, setBranch] = useState('');
@@ -40,7 +43,8 @@ export function Users({ intent, clearIntent }) {
   }, [users, q, branch]);
   const pages = Math.max(1, Math.ceil(filtered.length / size));
   const cur = Math.min(page, pages);
-  const items = filtered.slice((cur - 1) * size, cur * size);
+  const sorter = useSort(filtered, null);
+  const items = sorter.rows.slice((cur - 1) * size, cur * size);
 
   const act = async (body, okMsg) => {
     try {
@@ -58,13 +62,18 @@ export function Users({ intent, clearIntent }) {
     if (action === 'status') await act({ action: 'set-status', user_id: u.id, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' }, 'Status user diperbarui');
     else if (action === 'role') {
       const next = u.role === 'ADMIN' ? 'USER' : 'ADMIN';
-      if (window.confirm(`Ubah role ${u.name} menjadi ${next}?`)) await act({ action: 'set-role', user_id: u.id, role: next }, 'Role user diperbarui');
+      if (await confirm({ title: 'Ubah role?', message: `Role ${u.name} akan diubah menjadi ${next}.`, okText: 'Ubah role' })) {
+        await act({ action: 'set-role', user_id: u.id, role: next }, 'Role user diperbarui');
+      }
     } else if (action === 'reset') {
-      if (!window.confirm(`Reset password untuk ${u.name}? Password lama akan tidak berlaku lagi.`)) return;
+      if (!(await confirm({ title: 'Reset password?', message: `Password lama ${u.name} tidak akan berlaku lagi. Password baru ditampilkan sekali.`, okText: 'Reset password' }))) return;
       const res = await act({ action: 'reset-password', user_id: u.id });
       if (res) setNewPw({ name: u.name, password: res.new_password });
     } else if (action === 'delete') {
-      if (!window.confirm(`Hapus user "${u.name}" secara PERMANEN? Nilai ujiannya tetap tersimpan untuk laporan, tapi akunnya tidak bisa login lagi. Tindakan ini tidak dapat dibatalkan.`)) return;
+      if (!(await confirm({
+        title: 'Hapus user?', danger: true, okText: 'Hapus permanen',
+        message: `Akun "${u.name}" dihapus permanen dan tidak bisa login lagi. Nilai ujiannya tetap tersimpan untuk laporan. Tindakan ini tidak dapat dibatalkan.`,
+      }))) return;
       await act({ action: 'delete', user_id: u.id }, 'User dihapus');
     }
   };
@@ -94,7 +103,7 @@ export function Users({ intent, clearIntent }) {
         }
       });
       toast(`${created} user berhasil diimpor${errors.length ? `, ${errors.length} baris gagal` : ''}`, errors.length ? '' : 'success');
-      if (errors.length) window.alert(`Baris yang gagal:\n\n${errors.slice(0, 20).join('\n')}${errors.length > 20 ? `\n…dan ${errors.length - 20} lainnya` : ''}`);
+      if (errors.length) await notice({ title: 'Sebagian baris gagal diimpor', message: `${errors.length} baris tidak dibuat. Perbaiki lalu impor ulang hanya baris itu.`, lines: errors.slice(0, 30) });
       setImporting(false); setFile(null);
       load();
     } catch (e) {
@@ -114,6 +123,7 @@ export function Users({ intent, clearIntent }) {
         </select>
         <button className="btn" onClick={() => setForm({ ...EMPTY })}>+ Tambah user</button>
         <button className="btn secondary" onClick={() => setImporting(true)}>Impor CSV</button>
+        <button className="btn secondary" onClick={() => downloadText('templat-user.csv', `\uFEFF${USERS_TEMPLATE}`)}>Templat CSV</button>
       </div>
 
       <div className="card">
@@ -124,9 +134,9 @@ export function Users({ intent, clearIntent }) {
         </div>
         <div className="table-wrap responsive-cards">
           <table>
-            <thead><tr><th>Nama</th><th>Email</th><th>Cabang</th><th>Role</th><th>Status</th><th>Aksi</th></tr></thead>
+            <thead><tr><SortTh k="name" {...sorter}>Nama</SortTh><SortTh k="email" {...sorter}>Email</SortTh><SortTh k="branch" {...sorter}>Cabang</SortTh><SortTh k="role" {...sorter}>Role</SortTh><SortTh k="status" {...sorter}>Status</SortTh><th>Aksi</th></tr></thead>
             <tbody>
-              {users === null ? <tr><td colSpan={6}>Memuat...</td></tr> : null}
+              {users === null ? <SkeletonRows cols={6} /> : null}
               {users && !items.length ? <tr><td colSpan={6} style={{ color: 'var(--text-muted)' }}>Tidak ada user yang cocok</td></tr> : null}
               {items.map((u) => (
                 <tr key={u.id}>

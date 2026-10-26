@@ -6,6 +6,7 @@ import { listAssessments, fail } from '../lib/data';
 import { greeting, todayLong, firstName } from '../lib/format';
 import { Icon } from '../components/Icon';
 import { TrendChart } from '../components/TrendChart';
+import { SkeletonRows } from '../components/ui';
 
 export function Dashboard({ go }) {
   const { profile } = useAuth();
@@ -36,7 +37,11 @@ export function Dashboard({ go }) {
   }, [toast]);
 
   const stat = (icon, num, label) => (
-    <div className="card stat-card"><div className="stat-ico"><Icon name={icon} /></div><div className="num">{num}</div><div className="label">{label}</div></div>
+    <div className="card stat-card">
+      <div className="stat-ico"><Icon name={icon} /></div>
+      <div className="num">{d ? num : <div className="skeleton" style={{ height: 26, width: 60 }} />}</div>
+      <div className="label">{label}</div>
+    </div>
   );
   const empty = (n) => <tr><td colSpan={n} style={{ color: 'var(--text-muted)' }}>Belum ada data</td></tr>;
 
@@ -54,10 +59,10 @@ export function Dashboard({ go }) {
         </div>
       </div>
       <div className="grid cols-4" style={{ marginBottom: 16 }}>
-        {stat('users', d?.totalUsers ?? 0, 'Total user')}
-        {stat('file', d?.totalAssess ?? 0, 'Total ujian')}
-        {stat('check', d?.totalPublished ?? 0, 'Sudah terbit')}
-        {stat('chart', d?.totalScores ?? 0, 'Data nilai')}
+        {stat('users', d?.totalUsers, 'Total user')}
+        {stat('file', d?.totalAssess, 'Total ujian')}
+        {stat('check', d?.totalPublished, 'Sudah terbit')}
+        {stat('chart', d?.totalScores, 'Data nilai')}
       </div>
       {d?.trend.length ? (
         <div className="card" style={{ marginBottom: 16 }}>
@@ -71,6 +76,7 @@ export function Dashboard({ go }) {
           <div className="table-wrap"><table>
             <thead><tr><th>Nama</th><th>Email</th><th>Role</th></tr></thead>
             <tbody>
+              {!d ? <SkeletonRows cols={3} rows={3} /> : null}
               {d?.recentUsers.map((u) => <tr key={u.email}><td>{u.name}</td><td>{u.email}</td><td><span className={`badge ${u.role}`}>{u.role}</span></td></tr>)}
               {d && !d.recentUsers.length ? empty(3) : null}
             </tbody>
@@ -81,6 +87,7 @@ export function Dashboard({ go }) {
           <div className="table-wrap"><table>
             <thead><tr><th>Ujian</th><th>Status</th><th>Peserta</th></tr></thead>
             <tbody>
+              {!d ? <SkeletonRows cols={3} rows={3} /> : null}
               {d?.recentAssess.map((a) => <tr key={a.id}><td>{a.name}</td><td>{a.published ? 'Terbit' : 'Draf'}</td><td>{a.participants}</td></tr>)}
               {d && !d.recentAssess.length ? empty(3) : null}
             </tbody>

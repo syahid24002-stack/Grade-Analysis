@@ -1,13 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFeedback } from '../lib/feedback';
 import { fetchAllScores, getAssessment, listAssessments } from '../lib/data';
-import { buildAnalysis } from '../lib/score';
+import { buildAnalysis, rankSoal } from '../lib/score';
 import { downloadText, toCsv } from '../lib/csv';
+import { downloadXlsx } from '../lib/xlsx';
+import { analysisSheets } from '../lib/report';
+import { EmptyState, Skeleton, SortTh, useSort } from '../components/ui';
+import { PrintSheet } from '../components/PrintSheet';
 import { f1 } from '../lib/format';
 import { AnBar, AnBadge, AnDelta, AnLevel, Dist, NoMateri, SummaryCards, anColor, anLevelColor } from '../components/analysisUi';
 import { StudentCard } from '../components/StudentCard';
 
 const muted = { color: 'var(--text-muted)' };
+
+/** Props StudentCard dari satu orang di hasil analisis. */
+function cardFor(d, p) {
+  const cab = d.cabang.find((c) => c.branch === p.branch);
+  const mOf = {};
+  d.overall.soal.forEach((x) => { mOf[x.no] = x.materi; });
+  return {
+    email: p.email, name: p.name, sub: `${p.email} · Cabang ${p.branch}`,
+    score: p.score, correct: p.correct, wrong: p.wrong, unanswered: p.unanswered, rank: p.rank, nAll: d.overall.sum.n, pctl: p.pctl,
+    rankC: p.rankC, nC: p.nC, avgC: p.avgC, avgAll: d.overall.sum.avg, batas: d.assessment.batas,
+    materi: d.materi.map((m, i) => ({
+      nama: m.nama, soal: m.soal, b: p.materi[i].b, n: p.materi[i].n, p: p.materi[i].p, s: p.materi[i].s,
+      br: cab ? cab.materi[i].avg : null, all: d.overall.materi[i].avg,
+    })),
+    answers: p.answers, mOf, showNoMateri: !d.materi.length,
+  };
+}
+
+const KUALITAS = { Baik: 'ACTIVE', Cukup: 'DRAFT', Rendah: 'DRAFT', Periksa: 'LOCKED' };
+const fmtDaya = (v) => (v == null ? '-' : v.toFixed(2).replace('.', ','));
 
 export function Analysis() {
   const { toast, busy } = useFeedback();
@@ -19,6 +43,7 @@ export function Analysis() {
   const [student, setStudent] = useState('');
   const [q, setQ] = useState('');
   const [pBranch, setPBranch] = useState('');
+  const [sheet, setSheet] = useState(null);
 
   useEffect(() => {
     listAssessments().then((l) => { setList(l); if (l.length) setId(l[0].id); }, (e) => { setList([]); toast(e.message, 'error'); });
@@ -44,34 +69,43 @@ export function Analysis() {
     setTimeout(() => document.getElementById('anDetail')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   };
 
-  if (list === null) return <div className="card" style={muted}>Memuat…</div>;
-  if (!list.length) return <div className="card" style={muted}>Belum ada ujian. Unggah CSV nilai di menu Ujian &amp; Nilai.</div>;
+  const openSheet = (title, people) => setSheet({ title, cards: people.map((p) => cardFor(data, p)) });
+
+  if (list === null) return <div className="card"><Skeleton lines={4} /></div>;
+  if (!list.length) return <div className="card"><EmptyState icon="chart" title="Belum ada ujian untuk dianalisis" text="Unggah CSV nilai di menu Ujian & Nilai, lalu kembali ke sini." /></div>;
 
   return (
     <div>
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card no-print" style={{ marginBottom: 16 }}>
         <div className="search-bar" style={{ marginBottom: 0 }}>
           <select value={id} onChange={(e) => setId(e.target.value)}>
             {list.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.participants} peserta)</option>)}
           </select>
           <button className="btn secondary" onClick={() => load(id)}>Muat ulang</button>
+          {data ? (
+            <>
+              <button className="btn" onClick={() => downloadXlsx(`analisis-${data.assessment.name}.xlsx`, analysisSheets(data))}>Unduh Excel</button>
+              <button className="btn secondary" onClick={() => window.print()}>Cetak laporan</button>
+            </>
+          ) : null}
         </div>
       </div>
 
       {data ? (
         <div>
-          <div className="an-tabs">
+          <div className="an-tabs no-print">
             <button className={`btn small ${tab === 'all' ? '' : 'secondary'}`} onClick={() => setTab('all')}>Keseluruhan</button>
             <button className={`btn small ${tab === 'c' ? '' : 'secondary'}`} onClick={() => setTab('c')}>Per cabang</button>
             <button className={`btn small ${tab === 'p' ? '' : 'secondary'}`} onClick={() => setTab('p')}>Per individu</button>
           </div>
           {tab === 'all' ? <OverallTab d={data} /> : null}
-          {tab === 'c' ? <BranchTab d={data} branch={branch} setBranch={setBranch} onStudent={(e) => pick(e, true)} /> : null}
+          {tab === 'c' ? <BranchTab d={data} branch={branch} setBranch={setBranch} onStudent={(e) => pick(e, true)} onSheet={openSheet} /> : null}
           {tab === 'p' ? (
-            <PeopleTab d={data} student={student} onPick={(e) => pick(e, false)} q={q} setQ={setQ} pBranch={pBranch} setPBranch={setPBranch} />
+            <PeopleTab d={data} student={student} onPick={(e) => pick(e, false)} q={q} setQ={setQ} pBranch={pBranch} setPBranch={setPBranch} onSheet={openSheet} />
           ) : null}
         </div>
       ) : null}
+      {sheet ? <PrintSheet title={sheet.title} cards={sheet.cards} onClose={() => setSheet(null)} /> : null}
     </div>
   );
 }
@@ -85,6 +119,12 @@ function OverallTab({ d }) {
     <>
       <h4>{d.assessment.name}</h4>
       <SummaryCards sm={o.sum} />
+      {d.insights.length ? (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h4>Ringkasan otomatis</h4>
+          {d.insights.map((i, k) => <div key={k} className={`insight ${i.type}`}>{i.text}</div>)}
+        </div>
+      ) : null}
       <NoMateri show={!d.materi.length} />
       <div className="grid cols-2" style={{ marginBottom: 16 }}>
         <div className="card"><h4>Sebaran nilai</h4><Dist bins={o.dist} /><div className="an-note">Jumlah peserta per rentang nilai</div></div>
@@ -124,15 +164,20 @@ function OverallTab({ d }) {
           </div>
         </>
       ) : null}
+      {d.attention.length ? (
+        <div className="card table-wrap" style={{ marginBottom: 16 }}>
+          <h4>Siswa yang perlu perhatian ({d.attention.length})</h4>
+          <table>
+            <thead><tr><th>Nama</th><th>Cabang</th><th>Nilai</th><th>Alasan</th></tr></thead>
+            <tbody>
+              {d.attention.map((p) => <tr key={p.email}><td>{p.name}</td><td>{p.branch}</td><td>{f1(p.score)}</td><td>{p.reasons.join(' · ')}</td></tr>)}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
       <SoalOverall d={d} />
     </>
   );
-}
-
-/** Peringkat 1 = soal tersulit (persen benar terendah) sampai peringkat terakhir = termudah. */
-function rankSoal(list) {
-  const s = list.filter((q) => q.pct != null).sort((x, y) => x.pct - y.pct || x.no - y.no);
-  return s.map((q, i) => ({ ...q, rk: i + 1 }));
 }
 
 function SoalOverall({ d }) {
@@ -148,7 +193,7 @@ function SoalOverall({ d }) {
       <div className="an-scroll">
         <table>
           <thead>
-            <tr><th>Peringkat</th><th>Soal</th><th>Materi</th><th>Persen benar</th><th></th><th>Benar</th><th>Salah</th><th>Kosong</th>{d.cabangList.map((c) => <th key={c}>{c} (%)</th>)}<th>Tingkat</th></tr>
+            <tr><th>Peringkat</th><th>Soal</th><th>Materi</th><th>Persen benar</th><th></th><th>Benar</th><th>Salah</th><th>Kosong</th>{d.cabangList.map((c) => <th key={c}>{c} (%)</th>)}<th>Tingkat</th><th>Daya beda</th><th>Kualitas</th></tr>
           </thead>
           <tbody>
             {list.map((q) => (
@@ -156,18 +201,20 @@ function SoalOverall({ d }) {
                 <td><b>{q.rk}</b></td><td>{q.no}</td><td>{q.materi}</td><td>{f1(q.pct)}%</td>
                 <td style={{ minWidth: 90 }}><AnBar pct={q.pct} color={anLevelColor(q.pct)} /></td>
                 <td>{q.benar}</td><td>{q.salah}</td><td>{q.kosong}</td>{q.byC.map((v, i) => <td key={i}>{f1(v)}</td>)}<td><AnLevel p={q.pct} /></td>
+                <td>{fmtDaya(q.daya)}</td><td>{q.dayaLabel ? <span className={`badge ${KUALITAS[q.dayaLabel]}`}>{q.dayaLabel}</span> : '-'}</td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <div className="an-note">Daya beda = proporsi benar kelompok atas (27% nilai tertinggi) dikurangi kelompok bawah. Baik ≥ 0,40 · Cukup 0,20–0,39 · Rendah &lt; 0,20 · Periksa &lt; 0: peserta pintar justru lebih sering salah, cek kunci jawaban. Perlu minimal 6 peserta.</div>
     </div>
   );
 }
 
 /* ---------------- Tab 2: per cabang ---------------- */
 
-function BranchTab({ d, branch, setBranch, onStudent }) {
+function BranchTab({ d, branch, setBranch, onStudent, onSheet }) {
   if (!d.cabang.length) return <div className="card">Belum ada data cabang.</div>;
   const c = d.cabang.find((x) => x.branch === branch) || d.cabang[0];
   const o = d.overall;
@@ -182,7 +229,10 @@ function BranchTab({ d, branch, setBranch, onStudent }) {
           <button key={x.branch} className={`btn small ${x.branch === c.branch ? '' : 'secondary'}`} onClick={() => setBranch(x.branch)}>{x.branch}</button>
         ))}
       </div>
-      <h4>Cabang {c.branch} · peringkat {c.rankCabang} dari {d.cabang.length} cabang</h4>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h4>Cabang {c.branch} · peringkat {c.rankCabang} dari {d.cabang.length} cabang</h4>
+        <button className="btn secondary small no-print" onClick={() => onSheet(`Rapor cabang ${c.branch}`, d.people.filter((p) => p.branch === c.branch))}>Cetak rapor semua siswa cabang ini</button>
+      </div>
       <SummaryCards sm={c.sum} />
       <div className="card" style={{ marginBottom: 16 }}>
         Rata-rata cabang <b>{f1(c.sum.avg)}</b> dibanding rata-rata semua <b>{f1(o.sum.avg)}</b> (<AnDelta x={c.delta} />).{' '}
@@ -307,14 +357,13 @@ function SoalBranch({ d, c }) {
 
 /* ---------------- Tab 3: per individu ---------------- */
 
-function PeopleTab({ d, student, onPick, q, setQ, pBranch, setPBranch }) {
+function PeopleTab({ d, student, onPick, q, setQ, pBranch, setPBranch, onSheet }) {
   const p = d.people.find((x) => x.email === student);
-  const cab = p ? d.cabang.find((c) => c.branch === p.branch) : null;
   const s = q.toLowerCase();
-  const list = d.people.filter((x) => (!pBranch || x.branch === pBranch) && (!s || `${x.name} ${x.email}`.toLowerCase().includes(s)));
-
-  const mOf = {};
-  d.overall.soal.forEach((x) => { mOf[x.no] = x.materi; });
+  const list = useMemo(() => d.people
+    .filter((x) => (!pBranch || x.branch === pBranch) && (!s || `${x.name} ${x.email}`.toLowerCase().includes(s)))
+    .map((x) => ({ ...x, lemahN: x.materi.filter((m) => m.s === 'Lemah').length, kuatN: x.materi.filter((m) => m.s === 'Kuat').length })), [d, pBranch, s]);
+  const sorter = useSort(list, 'rank', 'asc');
 
   const exportPeople = () => {
     const head = ['Peringkat', 'Nama', 'Email', 'Cabang', 'Nilai', 'Peringkat Cabang', 'Benar', 'Salah', 'Kosong']
@@ -334,20 +383,7 @@ function PeopleTab({ d, student, onPick, q, setQ, pBranch, setPBranch }) {
 
   return (
     <>
-      {p ? (
-        <StudentCard
-          o={{
-            id: 'anDetail', framed: true, onClose: () => onPick(''), name: p.name, sub: `${p.email} · Cabang ${p.branch}`,
-            score: p.score, correct: p.correct, wrong: p.wrong, unanswered: p.unanswered, rank: p.rank, nAll: d.overall.sum.n, pctl: p.pctl,
-            rankC: p.rankC, nC: p.nC, avgC: p.avgC, avgAll: d.overall.sum.avg, batas: d.assessment.batas,
-            materi: d.materi.map((m, i) => ({
-              nama: m.nama, soal: m.soal, b: p.materi[i].b, n: p.materi[i].n, p: p.materi[i].p, s: p.materi[i].s,
-              br: cab ? cab.materi[i].avg : null, all: d.overall.materi[i].avg,
-            })),
-            answers: p.answers, mOf, showNoMateri: !d.materi.length,
-          }}
-        />
-      ) : null}
+      {p ? <StudentCard o={{ ...cardFor(d, p), id: 'anDetail', framed: true, onClose: () => onPick('') }} /> : null}
       <div className="card table-wrap">
         <div className="search-bar">
           <input type="text" placeholder="Cari nama / email..." value={q} onChange={(e) => setQ(e.target.value)} />
@@ -356,15 +392,21 @@ function PeopleTab({ d, student, onPick, q, setQ, pBranch, setPBranch }) {
             {d.cabangList.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
           <button className="btn secondary" onClick={exportPeople}>Ekspor CSV</button>
+          <button className="btn" onClick={() => onSheet(`Rapor siswa${pBranch ? ` cabang ${pBranch}` : ''}`, list)} disabled={!list.length}>Cetak rapor ({list.length})</button>
         </div>
         <table>
-          <thead><tr><th>#</th><th>Nama</th><th>Cabang</th><th>Nilai</th><th>Peringkat cabang</th><th>Materi lemah</th><th>Materi kuat</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <SortTh k="rank" {...sorter}>#</SortTh><SortTh k="name" {...sorter}>Nama</SortTh><SortTh k="branch" {...sorter}>Cabang</SortTh><SortTh k="score" {...sorter}>Nilai</SortTh>
+              <SortTh k="rankC" {...sorter}>Peringkat cabang</SortTh><SortTh k="lemahN" {...sorter}>Materi lemah</SortTh><SortTh k="kuatN" {...sorter}>Materi kuat</SortTh><th />
+            </tr>
+          </thead>
           <tbody>
-            {list.map((x) => (
+            {sorter.rows.map((x) => (
               <tr key={x.email} className={x.email === student ? 'is-me' : undefined}>
                 <td>{x.rank}</td><td>{x.name}</td><td>{x.branch}</td><td>{f1(x.score)}</td><td>{x.rankC}/{x.nC}</td>
-                <td>{d.materi.length ? x.materi.filter((m) => m.s === 'Lemah').length : '-'}</td>
-                <td>{d.materi.length ? x.materi.filter((m) => m.s === 'Kuat').length : '-'}</td>
+                <td>{d.materi.length ? x.lemahN : '-'}</td>
+                <td>{d.materi.length ? x.kuatN : '-'}</td>
                 <td><button className="btn secondary small" onClick={() => onPick(x.email)}>Detail</button></td>
               </tr>
             ))}

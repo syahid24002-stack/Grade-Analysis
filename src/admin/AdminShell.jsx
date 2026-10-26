@@ -10,11 +10,13 @@ import { Scores } from './Scores';
 import { Users } from './Users';
 import { Settings } from './Settings';
 import { History } from './History';
+import { Compare } from './Compare';
 import { ActivityLog } from './ActivityLog';
 
 const VIEWS = {
   dashboard: { title: 'Dashboard', Comp: Dashboard },
   analysis: { title: 'Analisis', Comp: Analysis },
+  compare: { title: 'Bandingkan ujian', Comp: Compare },
   scores: { title: 'Ujian & Nilai', Comp: Scores },
   history: { title: 'Riwayat siswa', Comp: History },
   users: { title: 'Users', Comp: Users },
@@ -22,7 +24,7 @@ const VIEWS = {
   settings: { title: 'Pengaturan', Comp: Settings },
 };
 const NAV = [
-  { label: 'Ringkasan', items: [['dashboard', 'dashboard', 'Dashboard'], ['analysis', 'chart', 'Analisis']] },
+  { label: 'Ringkasan', items: [['dashboard', 'dashboard', 'Dashboard'], ['analysis', 'chart', 'Analisis'], ['compare', 'chart', 'Bandingkan ujian']] },
   { label: 'Data', items: [['scores', 'upload', 'Ujian & Nilai'], ['history', 'chart', 'Riwayat siswa'], ['users', 'users', 'Users']] },
   { label: 'Sistem', items: [['log', 'file', 'Log aktivitas'], ['settings', 'sliders', 'Pengaturan']] },
 ];
@@ -97,6 +99,7 @@ export function AdminShell() {
   const paletteItems = useMemo(() => [
     { t: 'Dashboard', i: 'dashboard', f: () => go('dashboard') },
     { t: 'Analisis', i: 'chart', f: () => go('analysis') },
+    { t: 'Bandingkan ujian', i: 'chart', f: () => go('compare') },
     { t: 'Ujian & Nilai', i: 'upload', f: () => go('scores') },
     { t: 'Riwayat siswa', i: 'chart', f: () => go('history') },
     { t: 'Users', i: 'users', f: () => go('users') },
